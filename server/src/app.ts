@@ -11,7 +11,7 @@ const app = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: config.clientUrl,
+    origin: config.clientUrl.split(',').map((url) => url.trim()),
     credentials: true,
   }),
 );
