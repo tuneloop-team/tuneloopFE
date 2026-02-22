@@ -4,6 +4,7 @@ import logger from '../utils/logger';
 
 const pool = new Pool({
   connectionString: config.databaseUrl,
+  ssl: config.nodeEnv === 'production' ? { rejectUnauthorized: false } : undefined,
 });
 
 pool.on('connect', () => {
