@@ -9,9 +9,20 @@ const app = express();
 
 // ─── Security ────────────────────────────────────────────────
 app.use(helmet());
+
+const allowedOrigins = config.clientUrl
+  .split(',')
+  .map((url) => url.trim())
+  .filter(Boolean);
+
+// Always allow the production frontend
+if (!allowedOrigins.includes('https://tuneloop.vercel.app')) {
+  allowedOrigins.push('https://tuneloop.vercel.app');
+}
+
 app.use(
   cors({
-    origin: config.clientUrl.split(',').map((url) => url.trim()),
+    origin: allowedOrigins,
     credentials: true,
   }),
 );
