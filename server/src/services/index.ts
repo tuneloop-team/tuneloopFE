@@ -1,2 +1,6 @@
-// Services barrel export
-// Add service exports here as they are created
+export {
+  findProfileByUsername,
+  createProfile,
+  getAllProfiles,
+} from './profileService';
+export type { ProfileRow, CreateProfileInput } from './profileService';

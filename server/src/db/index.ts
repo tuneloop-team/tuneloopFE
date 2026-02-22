@@ -33,7 +33,7 @@ export const getPool = (): Pool => pool;
 
 export const testConnection = async (): Promise<boolean> => {
   try {
-    await pool.query('SELECT NOW()');
+    await pool.query('SELECT 1');
     logger.info('Database connection test successful');
     return true;
   } catch (error) {
@@ -44,4 +44,16 @@ export const testConnection = async (): Promise<boolean> => {
   }
 };
 
-export default { query, getPool, testConnection };
+export const testConnectionWithLatency = async (): Promise<{ connected: boolean; latencyMs: number }> => {
+  const start = Date.now();
+  try {
+    await pool.query('SELECT 1');
+    const latencyMs = Date.now() - start;
+    return { connected: true, latencyMs };
+  } catch {
+    const latencyMs = Date.now() - start;
+    return { connected: false, latencyMs };
+  }
+};
+
+export default { query, getPool, testConnection, testConnectionWithLatency };
