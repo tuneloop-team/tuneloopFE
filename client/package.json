@@ -11,6 +11,8 @@
     "test": "echo \"No tests configured yet\" && exit 0"
   },
   "dependencies": {
+    "framer-motion": "^12.34.3",
+    "lucide-react": "^0.575.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.1.1"

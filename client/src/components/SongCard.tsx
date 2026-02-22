@@ -1,9 +1,37 @@
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Heart, Clock, Disc3 } from 'lucide-react';
 import type { Song } from '../types';
 
 interface SongCardProps {
   song: Song;
   username?: string;
   onLikeToggle?: (songId: string, isLiked: boolean) => void;
+  index?: number;
+}
+
+/* ─── Genre color mapping ─────────────────────────────────── */
+const genreColors: Record<string, string> = {
+  rock: 'bg-red-50 text-red-600',
+  pop: 'bg-pink-50 text-pink-600',
+  'r&b': 'bg-purple-50 text-purple-600',
+  alternative: 'bg-indigo-50 text-indigo-600',
+  grunge: 'bg-stone-100 text-stone-600',
+  'art rock': 'bg-violet-50 text-violet-600',
+  electronic: 'bg-cyan-50 text-cyan-600',
+  'synth-pop': 'bg-teal-50 text-teal-600',
+  'hip-hop': 'bg-amber-50 text-amber-700',
+  jazz: 'bg-yellow-50 text-yellow-700',
+  classical: 'bg-emerald-50 text-emerald-700',
+  reggae: 'bg-green-50 text-green-600',
+  country: 'bg-orange-50 text-orange-600',
+  blues: 'bg-blue-50 text-blue-600',
+  metal: 'bg-slate-100 text-slate-700',
+};
+
+function getGenreColor(genre: string): string {
+  const key = genre.toLowerCase();
+  return genreColors[key] || 'bg-surface-100 text-surface-600';
 }
 
 function formatDuration(ms: number): string {
@@ -16,85 +44,101 @@ export default function SongCard({
   song,
   username,
   onLikeToggle,
+  index = 0,
 }: SongCardProps) {
+  const [animating, setAnimating] = useState(false);
+
+  const handleLike = () => {
+    if (!username || !onLikeToggle) return;
+    setAnimating(true);
+    onLikeToggle(song.id, song.is_liked);
+    setTimeout(() => setAnimating(false), 400);
+  };
+
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-      {/* Cover */}
-      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: index * 0.05, ease: 'easeOut' }}
+      className="card card-hover group flex items-center gap-4 p-4"
+    >
+      {/* ─── Cover Art ─────────────────────────────── */}
+      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-primary-100 to-accent-100 shadow-sm">
         {song.cover_url ? (
           <img
             src={song.cover_url}
             alt={song.title}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
+            loading="lazy"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-xl text-gray-400">
-            ♪
+          <div className="flex h-full w-full items-center justify-center">
+            <Disc3 className="h-7 w-7 text-primary-300 transition-transform duration-500 group-hover:rotate-90" />
           </div>
         )}
       </div>
 
-      {/* Info */}
+      {/* ─── Info ──────────────────────────────────── */}
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-sm font-semibold text-gray-900">
+        <h3 className="truncate text-sm font-bold text-surface-900 group-hover:text-primary-600 transition-colors duration-200">
           {song.title}
         </h3>
-        <p className="truncate text-xs text-gray-500">{song.artist}</p>
-        <div className="mt-1 flex items-center gap-3 text-xs text-gray-400">
-          {song.album && <span>{song.album}</span>}
+        <p className="truncate text-xs font-medium text-surface-500">
+          {song.artist}
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
           {song.genre && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+            <span
+              className={`badge ${getGenreColor(song.genre)}`}
+            >
               {song.genre}
             </span>
           )}
-          <span>{formatDuration(song.duration_ms)}</span>
+          {song.album && (
+            <span className="badge-neutral hidden sm:inline-flex">
+              {song.album}
+            </span>
+          )}
+          <span className="flex items-center gap-1 text-2xs text-surface-400">
+            <Clock className="h-3 w-3" />
+            {formatDuration(song.duration_ms)}
+          </span>
         </div>
       </div>
 
-      {/* Like button */}
-      <div className="flex flex-col items-center gap-1">
+      {/* ─── Like Button ───────────────────────────── */}
+      <div className="flex flex-col items-center gap-0.5">
         <button
-          onClick={() => {
-            if (username && onLikeToggle) {
-              onLikeToggle(song.id, song.is_liked);
-            }
-          }}
+          onClick={handleLike}
           disabled={!username}
-          title={username ? (song.is_liked ? 'Unlike' : 'Like') : 'Set username to like songs'}
-          className={`flex h-9 w-9 items-center justify-center rounded-full transition-colors ${
+          aria-label={song.is_liked ? 'Unlike song' : 'Like song'}
+          title={
+            username
+              ? song.is_liked
+                ? 'Unlike'
+                : 'Like'
+              : 'Set username to like songs'
+          }
+          className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 ${
             song.is_liked
               ? 'bg-red-50 text-red-500 hover:bg-red-100'
-              : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-red-400'
-          } ${!username ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
+              : 'bg-surface-50 text-surface-300 hover:bg-surface-100 hover:text-red-400'
+          } ${!username ? 'cursor-not-allowed opacity-40' : 'cursor-pointer active:scale-90'}`}
         >
-          {song.is_liked ? (
-            <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                clipRule="evenodd"
-              />
-            </svg>
-          ) : (
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
-              />
-            </svg>
-          )}
+          <Heart
+            className={`h-5 w-5 transition-all duration-200 ${
+              song.is_liked ? 'fill-current' : ''
+            } ${animating ? 'animate-heart-pop' : ''}`}
+          />
         </button>
-        <span className="text-[10px] font-medium text-gray-400">
+        <span
+          className={`text-2xs font-semibold transition-colors duration-200 ${
+            song.is_liked ? 'text-red-400' : 'text-surface-300'
+          }`}
+        >
           {song.like_count}
         </span>
       </div>
-    </div>
+    </motion.div>
   );
 }

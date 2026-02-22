@@ -1,6 +1,20 @@
 import { useState, FormEvent } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Search,
+  UserPlus,
+  Calendar,
+  Heart,
+  Music,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+} from 'lucide-react';
 import api from '../services/api';
+import { useToast } from '../components/Toast';
 import SongCard from '../components/SongCard';
+import { ProfileCardSkeleton, SongCardSkeleton } from '../components/Skeleton';
+import EmptyState from '../components/EmptyState';
 import type {
   Profile,
   Song,
@@ -9,6 +23,8 @@ import type {
 } from '../types';
 
 export default function ProfilePage() {
+  const { toast } = useToast();
+
   const [form, setForm] = useState<CreateProfilePayload>({
     username: '',
     displayName: '',
@@ -19,6 +35,7 @@ export default function ProfilePage() {
   const [likedSongs, setLikedSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -36,8 +53,12 @@ export default function ProfilePage() {
       setProfile(res.data.data);
       setLikedSongs([]);
       setForm({ username: '', displayName: '', bio: '', avatarUrl: '' });
+      setCreateOpen(false);
+      toast('Profile created successfully!', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const msg = err instanceof Error ? err.message : 'Something went wrong';
+      setError(msg);
+      toast(msg, 'error');
     } finally {
       setLoading(false);
     }
@@ -59,15 +80,14 @@ export default function ProfilePage() {
       );
       setProfile(res.data.data);
 
-      // Fetch liked songs
       const likesRes = await api.get<ApiResponse<Song[]>>(
         `/songs/liked/${searchUsername.trim()}`,
       );
       setLikedSongs(likesRes.data.data);
-    } catch (err) {
+    } catch {
       setProfile(null);
       setLikedSongs([]);
-      setError(err instanceof Error ? err.message : 'Profile not found');
+      toast('Profile not found', 'error');
     } finally {
       setSearchLoading(false);
     }
@@ -78,7 +98,6 @@ export default function ProfilePage() {
     isLiked: boolean,
   ): Promise<void> => {
     if (!profile) return;
-
     try {
       if (isLiked) {
         await api.delete(`/songs/${songId}/like`, {
@@ -91,206 +110,302 @@ export default function ProfilePage() {
           username: profile.username,
         });
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Like action failed');
+    } catch {
+      toast('Like action failed', 'error');
     }
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
+    <div className="mx-auto max-w-2xl space-y-8">
+      {/* ─── Page Header ───────────────────────────── */}
+      <div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-surface-900">
+          Profile
+        </h1>
+        <p className="mt-1 text-sm text-surface-400">
+          Find a user or create a new profile
+        </p>
+      </div>
 
-      {/* ─── Error Banner ──────────────────────────────── */}
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {/* ─── Search ────────────────────────────────────── */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-gray-800">
-          Find Profile
-        </h2>
-        <form onSubmit={handleSearch} className="flex gap-3">
-          <input
-            type="text"
-            placeholder="Enter username..."
-            value={searchUsername}
-            onChange={(e) => setSearchUsername(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-          />
-          <button
-            type="submit"
-            disabled={searchLoading}
-            className="rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
+      {/* ─── Error Banner ──────────────────────────── */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden rounded-xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-600"
           >
-            {searchLoading ? 'Searching...' : 'Search'}
+            {error}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Search ────────────────────────────────── */}
+      <section className="card p-6">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50">
+            <Search className="h-4 w-4 text-primary-500" />
+          </div>
+          <h2 className="text-base font-bold text-surface-800">
+            Find Profile
+          </h2>
+        </div>
+        <form onSubmit={handleSearch} className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" />
+            <input
+              type="text"
+              placeholder="Enter username..."
+              value={searchUsername}
+              onChange={(e) => setSearchUsername(e.target.value)}
+              className="input !pl-10"
+            />
+          </div>
+          <button type="submit" disabled={searchLoading} className="btn-primary">
+            {searchLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              'Search'
+            )}
           </button>
         </form>
       </section>
 
-      {/* ─── Profile Card ──────────────────────────────── */}
-      {profile && (
-        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start gap-5">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary-100 text-2xl font-bold text-primary-600">
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.display_name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                profile.display_name.charAt(0).toUpperCase()
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-xl font-bold text-gray-900">
-                {profile.display_name}
-              </h3>
-              <p className="text-sm text-gray-500">@{profile.username}</p>
-              {profile.bio && (
-                <p className="mt-2 text-sm text-gray-600">{profile.bio}</p>
-              )}
-              <p className="mt-2 text-xs text-gray-400">
-                Joined {new Date(profile.created_at).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-        </section>
+      {/* ─── Loading Skeleton ──────────────────────── */}
+      {searchLoading && (
+        <div className="space-y-4">
+          <ProfileCardSkeleton />
+          <SongCardSkeleton />
+          <SongCardSkeleton />
+        </div>
       )}
 
-      {/* ─── Liked Songs ───────────────────────────────── */}
-      {profile && (
+      {/* ─── Profile Card ──────────────────────────── */}
+      <AnimatePresence>
+        {profile && !searchLoading && (
+          <motion.section
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.35 }}
+            className="card overflow-hidden"
+          >
+            {/* Gradient banner */}
+            <div className="h-24 bg-hero-mesh opacity-80" />
+
+            <div className="relative px-6 pb-6">
+              {/* Avatar */}
+              <div className="-mt-14 mb-4 flex items-end gap-4">
+                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-4 border-white bg-gradient-to-br from-primary-100 to-accent-100 text-3xl font-extrabold text-primary-600 shadow-glass">
+                  {profile.avatar_url ? (
+                    <img
+                      src={profile.avatar_url}
+                      alt={profile.display_name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    profile.display_name.charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div className="mb-1 min-w-0 flex-1">
+                  <h3 className="truncate text-xl font-extrabold text-surface-900">
+                    {profile.display_name}
+                  </h3>
+                  <p className="text-sm font-medium text-surface-400">
+                    @{profile.username}
+                  </p>
+                </div>
+              </div>
+
+              {/* Bio */}
+              {profile.bio && (
+                <p className="mb-3 text-sm leading-relaxed text-surface-600 line-clamp-3">
+                  {profile.bio}
+                </p>
+              )}
+
+              {/* Meta badges */}
+              <div className="flex flex-wrap gap-3 text-xs">
+                <span className="flex items-center gap-1.5 text-surface-400">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Joined{' '}
+                  {new Date(profile.created_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </span>
+                <span className="flex items-center gap-1.5 text-surface-400">
+                  <Heart className="h-3.5 w-3.5" />
+                  {likedSongs.length} liked song
+                  {likedSongs.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Liked Songs ───────────────────────────── */}
+      {profile && !searchLoading && (
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-gray-800">
-            Liked Songs ({likedSongs.length})
-          </h2>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50">
+              <Heart className="h-4 w-4 text-red-400" />
+            </div>
+            <h2 className="text-base font-bold text-surface-800">
+              Liked Songs
+            </h2>
+            <span className="badge-primary ml-auto">{likedSongs.length}</span>
+          </div>
+
           {likedSongs.length > 0 ? (
             <div className="space-y-3">
-              {likedSongs.map((song) => (
+              {likedSongs.map((song, i) => (
                 <SongCard
                   key={song.id}
                   song={song}
                   username={profile.username}
                   onLikeToggle={handleLikeToggle}
+                  index={i}
                 />
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-gray-200 bg-white py-8 text-center">
-              <p className="text-gray-400">No liked songs yet</p>
-            </div>
+            <EmptyState
+              icon={Music}
+              title="No liked songs yet"
+              description="Head to the home page to discover and like songs"
+            />
           )}
         </section>
       )}
 
-      {/* ─── Create Profile Form ───────────────────────── */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-gray-800">
-          Create New Profile
-        </h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Username *
-            </label>
-            <input
-              type="text"
-              name="username"
-              required
-              minLength={3}
-              maxLength={50}
-              pattern="^[a-zA-Z0-9_]+$"
-              value={form.username}
-              onChange={handleChange}
-              placeholder="john_doe"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Letters, numbers, underscores only
-            </p>
+      {/* ─── Create Profile (Accordion) ────────────── */}
+      <section className="card overflow-hidden">
+        <button
+          onClick={() => setCreateOpen(!createOpen)}
+          className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-surface-50"
+        >
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-50">
+              <UserPlus className="h-4 w-4 text-accent-500" />
+            </div>
+            <h2 className="text-base font-bold text-surface-800">
+              Create New Profile
+            </h2>
           </div>
+          {createOpen ? (
+            <ChevronUp className="h-5 w-5 text-surface-400" />
+          ) : (
+            <ChevronDown className="h-5 w-5 text-surface-400" />
+          )}
+        </button>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Display Name *
-            </label>
-            <input
-              type="text"
-              name="displayName"
-              required
-              maxLength={100}
-              value={form.displayName}
-              onChange={handleChange}
-              placeholder="John Doe"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-          </div>
+        <AnimatePresence>
+          {createOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              className="overflow-hidden"
+            >
+              <form
+                onSubmit={handleSubmit}
+                className="space-y-4 border-t border-surface-100 px-6 py-5"
+              >
+                {/* Username */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-surface-700">
+                    Username <span className="text-danger-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="username"
+                    required
+                    minLength={3}
+                    maxLength={50}
+                    pattern="^[a-zA-Z0-9_]+$"
+                    value={form.username}
+                    onChange={handleChange}
+                    placeholder="john_doe"
+                    className="input"
+                  />
+                  <p className="mt-1 text-2xs text-surface-400">
+                    Letters, numbers, underscores only
+                  </p>
+                </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Bio
-            </label>
-            <textarea
-              name="bio"
-              rows={3}
-              maxLength={500}
-              value={form.bio}
-              onChange={handleChange}
-              placeholder="Tell us about yourself..."
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-          </div>
+                {/* Display Name */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-surface-700">
+                    Display Name <span className="text-danger-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="displayName"
+                    required
+                    maxLength={100}
+                    value={form.displayName}
+                    onChange={handleChange}
+                    placeholder="John Doe"
+                    className="input"
+                  />
+                </div>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Avatar URL
-            </label>
-            <input
-              type="url"
-              name="avatarUrl"
-              value={form.avatarUrl}
-              onChange={handleChange}
-              placeholder="https://example.com/avatar.jpg"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500"
-            />
-          </div>
+                {/* Bio */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-surface-700">
+                    Bio
+                  </label>
+                  <textarea
+                    name="bio"
+                    rows={3}
+                    maxLength={500}
+                    value={form.bio}
+                    onChange={handleChange}
+                    placeholder="Tell us about yourself..."
+                    className="input resize-none"
+                  />
+                </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-primary-500 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-600 disabled:opacity-50"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
+                {/* Avatar URL */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-surface-700">
+                    Avatar URL
+                  </label>
+                  <input
+                    type="url"
+                    name="avatarUrl"
+                    value={form.avatarUrl}
+                    onChange={handleChange}
+                    placeholder="https://example.com/avatar.jpg"
+                    className="input"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="btn-primary w-full"
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-                Creating...
-              </span>
-            ) : (
-              'Create Profile'
-            )}
-          </button>
-        </form>
+                  {loading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Creating...
+                    </span>
+                  ) : (
+                    <>
+                      <UserPlus className="h-4 w-4" />
+                      Create Profile
+                    </>
+                  )}
+                </button>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
     </div>
   );
