@@ -128,14 +128,95 @@ export const getLikedSongs = async (
   const result = await query(
     `SELECT s.*,
             COUNT(l2.id)::int AS like_count,
-            TRUE AS is_liked
+            TRUE AS is_liked,
+            MAX(l.created_at) AS liked_at
      FROM likes l
      JOIN songs s ON s.id = l.song_id
      LEFT JOIN likes l2 ON l2.song_id = s.id
      WHERE l.profile_id = $1
      GROUP BY s.id
-     ORDER BY l.created_at DESC`,
+     ORDER BY liked_at DESC`,
     [profileId],
   );
   return result.rows as SongWithLike[];
+};
+
+/**
+ * Get all songs (for homepage feed) with optional like status
+ */
+export const getAllSongs = async (
+  profileId?: string,
+  limit = 50,
+): Promise<SongWithLike[]> => {
+  const result = await query(
+    `SELECT s.*,
+            COUNT(l.id)::int AS like_count,
+            BOOL_OR(l.profile_id = $1) AS is_liked
+     FROM songs s
+     LEFT JOIN likes l ON l.song_id = s.id
+     GROUP BY s.id
+     ORDER BY like_count DESC, s.artist, s.title
+     LIMIT $2`,
+    [profileId || null, limit],
+  );
+  return result.rows as SongWithLike[];
+};
+
+/**
+ * Get trending songs (most liked)
+ */
+export const getTrendingSongs = async (
+  profileId?: string,
+  limit = 10,
+): Promise<SongWithLike[]> => {
+  const result = await query(
+    `SELECT s.*,
+            COUNT(l.id)::int AS like_count,
+            BOOL_OR(l.profile_id = $1) AS is_liked
+     FROM songs s
+     LEFT JOIN likes l ON l.song_id = s.id
+     GROUP BY s.id
+     HAVING COUNT(l.id) > 0
+     ORDER BY like_count DESC
+     LIMIT $2`,
+    [profileId || null, limit],
+  );
+  return result.rows as SongWithLike[];
+};
+
+/**
+ * Autocomplete suggestions — returns matching artist names and song titles
+ */
+export const getSuggestions = async (
+  searchQuery: string,
+  limit = 8,
+): Promise<{ type: 'artist' | 'title'; value: string }[]> => {
+  const pattern = `%${searchQuery}%`;
+
+  // Artists (distinct)
+  const artists = await query(
+    `SELECT DISTINCT artist AS value
+     FROM songs
+     WHERE LOWER(artist) LIKE LOWER($1)
+     ORDER BY artist
+     LIMIT $2`,
+    [pattern, limit],
+  );
+
+  // Titles
+  const titles = await query(
+    `SELECT title AS value
+     FROM songs
+     WHERE LOWER(title) LIKE LOWER($1)
+     ORDER BY title
+     LIMIT $2`,
+    [pattern, limit],
+  );
+
+  const results: { type: 'artist' | 'title'; value: string }[] = [
+    ...artists.rows.map((r: { value: string }) => ({ type: 'artist' as const, value: r.value })),
+    ...titles.rows.map((r: { value: string }) => ({ type: 'title' as const, value: r.value })),
+  ];
+
+  return results.slice(0, limit);
 };

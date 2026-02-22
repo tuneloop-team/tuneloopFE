@@ -5,6 +5,9 @@ import {
   unlikeSong,
   getSongById,
   getLikedSongs,
+  getAllSongs,
+  getTrendingSongs,
+  getSuggestions,
 } from '../services/songService';
 import { findProfileByUsername } from '../services/profileService';
 import { AppError } from '../utils/AppError';
@@ -127,6 +130,81 @@ export const likedByUser = async (
     const songs = await getLikedSongs(profile.id);
 
     res.status(200).json({ status: 'ok', data: songs });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/songs?username=...&limit=50
+ * Returns all songs for the home feed
+ */
+export const listAll = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const username = req.query.username as string | undefined;
+    const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 100);
+
+    let profileId: string | undefined;
+    if (username) {
+      const profile = await findProfileByUsername(username);
+      if (profile) profileId = profile.id;
+    }
+
+    const songs = await getAllSongs(profileId, limit);
+    res.status(200).json({ status: 'ok', data: songs });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/songs/trending?username=...&limit=10
+ * Returns most-liked songs
+ */
+export const trending = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const username = req.query.username as string | undefined;
+    const limit = Math.min(parseInt((req.query.limit as string) || '10', 10), 50);
+
+    let profileId: string | undefined;
+    if (username) {
+      const profile = await findProfileByUsername(username);
+      if (profile) profileId = profile.id;
+    }
+
+    const songs = await getTrendingSongs(profileId, limit);
+    res.status(200).json({ status: 'ok', data: songs });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/songs/suggest?q=...
+ * Returns autocomplete suggestions (artists + titles)
+ */
+export const suggest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const q = req.query.q as string;
+    if (!q || q.trim().length === 0) {
+      res.status(200).json({ status: 'ok', data: [] });
+      return;
+    }
+
+    const suggestions = await getSuggestions(q.trim());
+    res.status(200).json({ status: 'ok', data: suggestions });
   } catch (error) {
     next(error);
   }

@@ -1,29 +1,72 @@
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, useCallback, FormEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, Music, Headphones, Mic2, LayoutGrid, List } from 'lucide-react';
+import {
+  Search,
+  X,
+  Music,
+  Headphones,
+  Mic2,
+  LayoutGrid,
+  List,
+  TrendingUp,
+  Disc3,
+  Loader2,
+} from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../components/Toast';
 import SongCard from '../components/SongCard';
 import { SongCardSkeleton } from '../components/Skeleton';
-import EmptyState from '../components/EmptyState';
 import type { Song, ApiResponse } from '../types';
 
 type SearchBy = 'all' | 'artist' | 'title';
 
-const filterButtons: { value: SearchBy; label: string; icon: React.ReactNode }[] = [
+interface Suggestion {
+  type: 'artist' | 'title';
+  value: string;
+}
+
+const filterButtons: {
+  value: SearchBy;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
   { value: 'all', label: 'All', icon: <Music className="h-3.5 w-3.5" /> },
-  { value: 'artist', label: 'Artist', icon: <Mic2 className="h-3.5 w-3.5" /> },
-  { value: 'title', label: 'Title', icon: <Headphones className="h-3.5 w-3.5" /> },
+  {
+    value: 'artist',
+    label: 'Artist',
+    icon: <Mic2 className="h-3.5 w-3.5" />,
+  },
+  {
+    value: 'title',
+    label: 'Title',
+    icon: <Headphones className="h-3.5 w-3.5" />,
+  },
 ];
+
+/* ─── debounce utility ────────────────────────────────────── */
+function useDebounce<T>(value: T, delay: number): T {
+  const [deb, setDeb] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setDeb(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return deb;
+}
 
 export default function Home() {
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
+  const suggestRef = useRef<HTMLDivElement>(null);
 
   const [query, setQuery] = useState('');
   const [searchBy, setSearchBy] = useState<SearchBy>('all');
   const [results, setResults] = useState<Song[]>([]);
+  const [allSongs, setAllSongs] = useState<Song[]>([]);
+  const [trendingSongs, setTrendingSongs] = useState<Song[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(true);
   const [searched, setSearched] = useState(false);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
@@ -37,6 +80,73 @@ export default function Home() {
     localStorage.setItem('tuneloop_username', val);
   };
 
+  // ─── Load all songs + trending on mount ─────────────────
+  const loadFeed = useCallback(async () => {
+    setFeedLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (username) params.set('username', username);
+
+      const [allRes, trendRes] = await Promise.all([
+        api.get<ApiResponse<Song[]>>(`/songs?${params.toString()}`),
+        api.get<ApiResponse<Song[]>>(
+          `/songs/trending?${params.toString()}&limit=5`,
+        ),
+      ]);
+      setAllSongs(allRes.data.data);
+      setTrendingSongs(trendRes.data.data);
+    } catch {
+      /* silent — feed is non-critical */
+    } finally {
+      setFeedLoading(false);
+    }
+  }, [username]);
+
+  useEffect(() => {
+    loadFeed();
+  }, [loadFeed]);
+
+  // ─── Autocomplete suggestions ───────────────────────────
+  const debouncedQuery = useDebounce(query, 250);
+
+  useEffect(() => {
+    if (debouncedQuery.trim().length < 1) {
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get<ApiResponse<Suggestion[]>>(
+          `/songs/suggest?q=${encodeURIComponent(debouncedQuery.trim())}`,
+        );
+        if (!cancelled) {
+          setSuggestions(res.data.data);
+          setShowSuggestions(true);
+        }
+      } catch {
+        /* silent */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedQuery]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (
+        suggestRef.current &&
+        !suggestRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
   // Keyboard shortcut
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,6 +155,7 @@ export default function Home() {
         inputRef.current?.focus();
       }
       if (e.key === 'Escape') {
+        setShowSuggestions(false);
         inputRef.current?.blur();
       }
     };
@@ -52,32 +163,49 @@ export default function Home() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  const handleSearch = async (e: FormEvent): Promise<void> => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  // ─── Search ─────────────────────────────────────────────
+  const doSearch = useCallback(
+    async (q: string, by: SearchBy) => {
+      if (!q.trim()) return;
+      setLoading(true);
+      setSearched(true);
+      setShowSuggestions(false);
 
-    setLoading(true);
-    setSearched(true);
+      try {
+        const params = new URLSearchParams({ q: q.trim(), by });
+        if (username) params.set('username', username);
 
-    try {
-      const params = new URLSearchParams({ q: query.trim(), by: searchBy });
-      if (username) params.set('username', username);
-
-      const res = await api.get<ApiResponse<Song[]>>(
-        `/songs/search?${params.toString()}`,
-      );
-      setResults(res.data.data);
-      if (res.data.data.length === 0) {
-        toast('No songs found. Try a different search.', 'info');
+        const res = await api.get<ApiResponse<Song[]>>(
+          `/songs/search?${params.toString()}`,
+        );
+        setResults(res.data.data);
+        if (res.data.data.length === 0) {
+          toast('No songs found. Try a different search.', 'info');
+        }
+      } catch {
+        toast('Search failed. Please try again.', 'error');
+        setResults([]);
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      toast('Search failed. Please try again.', 'error');
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
+    },
+    [username, toast],
+  );
+
+  const handleSearch = (e: FormEvent) => {
+    e.preventDefault();
+    doSearch(query, searchBy);
   };
 
+  const handleSuggestionClick = (s: Suggestion) => {
+    setQuery(s.value);
+    const by = s.type === 'artist' ? 'artist' : 'title';
+    setSearchBy(by);
+    setShowSuggestions(false);
+    doSearch(s.value, by);
+  };
+
+  // ─── Like toggle (works for both feed & results) ────────
   const handleLikeToggle = async (
     songId: string,
     isLiked: boolean,
@@ -94,7 +222,7 @@ export default function Home() {
         await api.post(`/songs/${songId}/like`, { username });
       }
 
-      setResults((prev) =>
+      const updater = (prev: Song[]) =>
         prev.map((s) =>
           s.id === songId
             ? {
@@ -103,8 +231,11 @@ export default function Home() {
                 like_count: isLiked ? s.like_count - 1 : s.like_count + 1,
               }
             : s,
-        ),
-      );
+        );
+
+      setResults(updater);
+      setAllSongs(updater);
+      setTrendingSongs(updater);
     } catch {
       toast('Like action failed', 'error');
     }
@@ -114,8 +245,13 @@ export default function Home() {
     setQuery('');
     setResults([]);
     setSearched(false);
+    setSuggestions([]);
     inputRef.current?.focus();
   };
+
+  // Which songs to display (search results or full feed)
+  const displaySongs = searched ? results : allSongs;
+  const isLoading = searched ? loading : feedLoading;
 
   return (
     <div className="space-y-8">
@@ -155,7 +291,7 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 flex max-w-sm items-center gap-2 rounded-full border border-surface-200 bg-white/80 px-4 py-2 shadow-sm backdrop-blur-sm"
           >
-            <span className="text-xs font-semibold text-surface-400 uppercase tracking-wider">
+            <span className="text-xs font-semibold uppercase tracking-wider text-surface-400">
               Username
             </span>
             <input
@@ -172,7 +308,7 @@ export default function Home() {
             )}
           </motion.div>
 
-          {/* ─── Search Bar ────────────────────────── */}
+          {/* ─── Search Bar + Autocomplete ─────────── */}
           <motion.form
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -180,13 +316,14 @@ export default function Home() {
             onSubmit={handleSearch}
             className="group relative mx-auto mt-6 max-w-xl"
           >
-            <div className="relative">
+            <div className="relative" ref={suggestRef}>
               <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-surface-400 transition-colors group-focus-within:text-primary-500" />
               <input
                 ref={inputRef}
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
                 placeholder={
                   searchBy === 'artist'
                     ? 'Search by artist name...'
@@ -194,7 +331,7 @@ export default function Home() {
                       ? 'Search by song title...'
                       : 'Search by artist or title...'
                 }
-                className="w-full rounded-2xl border border-surface-200 bg-white/90 py-3.5 pl-12 pr-24 text-sm shadow-glass backdrop-blur-md transition-all duration-200 placeholder:text-surface-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-100 focus:shadow-glow"
+                className="w-full rounded-2xl border border-surface-200 bg-white/90 py-3.5 pl-12 pr-24 text-sm shadow-glass backdrop-blur-md transition-all duration-200 placeholder:text-surface-400 focus:border-primary-400 focus:shadow-glow focus:outline-none focus:ring-2 focus:ring-primary-100"
               />
               {/* Clear button */}
               {query && (
@@ -212,17 +349,45 @@ export default function Home() {
                 className="btn-primary absolute right-2 top-1/2 -translate-y-1/2 !rounded-xl !px-4 !py-2 text-xs"
               >
                 {loading ? (
-                  <span className="flex items-center gap-1.5">
-                    <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Searching
-                  </span>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   'Search'
                 )}
               </button>
+
+              {/* ─── Suggestions Dropdown ────────── */}
+              <AnimatePresence>
+                {showSuggestions && suggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute left-0 right-0 top-full z-50 mt-2 overflow-hidden rounded-xl border border-surface-200 bg-white shadow-glass-lg"
+                  >
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={`${s.type}-${s.value}-${i}`}
+                        type="button"
+                        onClick={() => handleSuggestionClick(s)}
+                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-surface-50"
+                      >
+                        {s.type === 'artist' ? (
+                          <Mic2 className="h-4 w-4 shrink-0 text-accent-400" />
+                        ) : (
+                          <Music className="h-4 w-4 shrink-0 text-primary-400" />
+                        )}
+                        <span className="min-w-0 truncate text-surface-700">
+                          {s.value}
+                        </span>
+                        <span className="ml-auto shrink-0 rounded-full bg-surface-100 px-2 py-0.5 text-2xs font-semibold text-surface-400">
+                          {s.type}
+                        </span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Filter pills */}
@@ -245,7 +410,11 @@ export default function Home() {
 
               {/* Keyboard hint */}
               <span className="ml-3 hidden items-center gap-1 text-2xs text-surface-300 sm:flex">
-                Press <kbd className="rounded border border-surface-200 bg-surface-50 px-1.5 py-0.5 font-mono text-2xs">/</kbd> to focus
+                Press{' '}
+                <kbd className="rounded border border-surface-200 bg-surface-50 px-1.5 py-0.5 font-mono text-2xs">
+                  /
+                </kbd>{' '}
+                to focus
               </span>
             </div>
           </motion.form>
@@ -253,11 +422,41 @@ export default function Home() {
       </section>
 
       {/* ════════════════════════════════════════════════════
-          RESULTS
+          TRENDING SONGS (only when NOT searching)
+         ════════════════════════════════════════════════════ */}
+      {!searched && !feedLoading && trendingSongs.length > 0 && (
+        <section className="mx-auto max-w-3xl">
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-orange-50">
+              <TrendingUp className="h-4 w-4 text-amber-500" />
+            </div>
+            <h2 className="text-base font-bold text-surface-800">
+              Trending Now
+            </h2>
+            <span className="badge bg-amber-50 text-amber-600">
+              Most Liked
+            </span>
+          </div>
+          <div className="space-y-3">
+            {trendingSongs.map((song, i) => (
+              <SongCard
+                key={song.id}
+                song={song}
+                username={username}
+                onLikeToggle={handleLikeToggle}
+                index={i}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ════════════════════════════════════════════════════
+          SONG LIST (search results OR full catalog)
          ════════════════════════════════════════════════════ */}
       <section className="mx-auto max-w-3xl">
         {/* Loading skeletons */}
-        {loading && (
+        {isLoading && (
           <div className="space-y-3">
             {Array.from({ length: 5 }).map((_, i) => (
               <SongCardSkeleton key={i} />
@@ -265,26 +464,58 @@ export default function Home() {
           </div>
         )}
 
-        {/* Results */}
-        {searched && !loading && results.length > 0 && (
+        {/* Song list */}
+        {!isLoading && displaySongs.length > 0 && (
           <div>
-            {/* Results header */}
+            {/* Section header */}
             <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm font-semibold text-surface-500">
-                <span className="text-surface-900">{results.length}</span> result
-                {results.length !== 1 ? 's' : ''} found
-              </p>
+              <div className="flex items-center gap-2">
+                {!searched && (
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50">
+                    <Disc3 className="h-4 w-4 text-primary-500" />
+                  </div>
+                )}
+                <p className="text-sm font-semibold text-surface-500">
+                  {searched ? (
+                    <>
+                      <span className="text-surface-900">
+                        {results.length}
+                      </span>{' '}
+                      result{results.length !== 1 ? 's' : ''} found
+                    </>
+                  ) : (
+                    <span className="text-surface-800">All Songs</span>
+                  )}
+                </p>
+                {searched && (
+                  <button
+                    onClick={clearSearch}
+                    className="ml-2 flex items-center gap-1 rounded-full bg-surface-100 px-2.5 py-1 text-2xs font-semibold text-surface-500 transition-colors hover:bg-surface-200 hover:text-surface-700"
+                  >
+                    <X className="h-3 w-3" />
+                    Clear
+                  </button>
+                )}
+              </div>
               <div className="flex items-center gap-1 rounded-lg border border-surface-200 bg-white p-0.5">
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`rounded-md p-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-100 text-surface-900' : 'text-surface-400 hover:text-surface-600'}`}
+                  className={`rounded-md p-1.5 transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-surface-100 text-surface-900'
+                      : 'text-surface-400 hover:text-surface-600'
+                  }`}
                   aria-label="List view"
                 >
                   <List className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`rounded-md p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-100 text-surface-900' : 'text-surface-400 hover:text-surface-600'}`}
+                  className={`rounded-md p-1.5 transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-surface-100 text-surface-900'
+                      : 'text-surface-400 hover:text-surface-600'
+                  }`}
                   aria-label="Grid view"
                 >
                   <LayoutGrid className="h-4 w-4" />
@@ -292,10 +523,10 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Song list */}
+            {/* Songs */}
             <AnimatePresence mode="wait">
               <motion.div
-                key={viewMode}
+                key={`${searched}-${viewMode}`}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -306,7 +537,7 @@ export default function Home() {
                     : 'space-y-3'
                 }
               >
-                {results.map((song, i) => (
+                {displaySongs.map((song, i) => (
                   <SongCard
                     key={song.id}
                     song={song}
@@ -320,32 +551,28 @@ export default function Home() {
           </div>
         )}
 
-        {/* No results */}
+        {/* No results from search */}
         {searched && !loading && results.length === 0 && (
-          <EmptyState
-            icon={Search}
-            title="No songs found"
-            description="Try a different search term or change the filter"
-            action={
-              <button onClick={clearSearch} className="btn-secondary text-xs">
-                Clear search
-              </button>
-            }
-          />
-        )}
-
-        {/* Initial state */}
-        {!searched && !loading && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.5 }}
+            className="card flex flex-col items-center justify-center px-8 py-16 text-center"
           >
-            <EmptyState
-              icon={Headphones}
-              title="Start discovering"
-              description="Search for your favorite artists or song titles to explore music"
-            />
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-50 to-accent-50">
+              <Search className="h-8 w-8 text-primary-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-surface-800">
+              No songs found
+            </h3>
+            <p className="mt-1.5 max-w-sm text-sm text-surface-400">
+              Try a different search term or change the filter
+            </p>
+            <button
+              onClick={clearSearch}
+              className="btn-secondary mt-5 text-xs"
+            >
+              Clear search
+            </button>
           </motion.div>
         )}
       </section>

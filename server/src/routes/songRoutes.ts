@@ -1,7 +1,16 @@
 import { Router } from 'express';
-import { search, like, unlike, likedByUser } from '../controllers/songController';
+import { search, like, unlike, likedByUser, listAll, trending, suggest } from '../controllers/songController';
 
 const router = Router();
+
+// All songs feed
+router.get('/', listAll);
+
+// Trending (most liked)
+router.get('/trending', trending);
+
+// Autocomplete suggestions
+router.get('/suggest', suggest);
 
 // COM-2 + COM-4 + COM-5: Search songs
 router.get('/search', search);
