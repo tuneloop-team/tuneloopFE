@@ -24,6 +24,14 @@ app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger);
 
 // ─── Routes ──────────────────────────────────────────────────
+app.get('/', (_req, res) => {
+  res.json({
+    name: 'TuneLoop API',
+    version: '1.0.0',
+    status: 'running',
+    docs: '/api/health',
+  });
+});
 app.use('/api', routes);
 
 // ─── Error Handling ──────────────────────────────────────────
