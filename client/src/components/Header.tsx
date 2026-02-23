@@ -1,9 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { Music2, Home, UserCircle, Menu, X } from 'lucide-react';
+import { Music2, Home, UserCircle, ListMusic, Menu, X } from 'lucide-react';
 
 const links = [
   { to: '/', label: 'Home', icon: Home },
+  { to: '/playlists', label: 'Playlists', icon: ListMusic },
   { to: '/profile', label: 'Profile', icon: UserCircle },
 ] as const;
 

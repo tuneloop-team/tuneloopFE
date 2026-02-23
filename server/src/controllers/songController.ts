@@ -129,7 +129,11 @@ export const likedByUser = async (
 
     const songs = await getLikedSongs(profile.id);
 
-    res.status(200).json({ status: 'ok', data: songs });
+    res.status(200).json({
+      status: 'ok',
+      data: songs,
+      meta: { total: songs.length },
+    });
   } catch (error) {
     next(error);
   }

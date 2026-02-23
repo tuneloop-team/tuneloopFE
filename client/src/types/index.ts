@@ -37,6 +37,20 @@ export interface Song {
   like_count: number;
 }
 
+export interface Playlist {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  track_count: number;
+}
+
+export interface PlaylistDetail extends Playlist {
+  tracks: Song[];
+}
+
 export interface ApiHealthResponse {
   status: string;
   timestamp: string;
@@ -49,4 +63,5 @@ export interface ApiHealthResponse {
 export interface ApiResponse<T> {
   status: string;
   data: T;
+  meta?: { total: number };
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Heart, Clock, Disc3 } from 'lucide-react';
+import AddToPlaylist from './AddToPlaylist';
 import type { Song } from '../types';
 
 interface SongCardProps {
@@ -106,8 +107,15 @@ export default function SongCard({
         </div>
       </div>
 
-      {/* ─── Like Button ───────────────────────────── */}
-      <div className="flex flex-col items-center gap-0.5">
+      {/* ─── Actions ─────────────────────────────── */}
+      <div className="flex items-center gap-2">
+        {/* Add to playlist */}
+        {username && (
+          <AddToPlaylist songId={song.id} username={username} />
+        )}
+
+        {/* Like Button */}
+        <div className="flex flex-col items-center gap-0.5">
         <button
           onClick={handleLike}
           disabled={!username}
@@ -138,6 +146,7 @@ export default function SongCard({
         >
           {song.like_count}
         </span>
+        </div>
       </div>
     </motion.div>
   );

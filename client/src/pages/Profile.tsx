@@ -1,4 +1,5 @@
 import { useState, FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -6,6 +7,7 @@ import {
   Calendar,
   Heart,
   Music,
+  ListMusic,
   ChevronDown,
   ChevronUp,
   Loader2,
@@ -18,6 +20,7 @@ import EmptyState from '../components/EmptyState';
 import type {
   Profile,
   Song,
+  Playlist,
   ApiResponse,
   CreateProfilePayload,
 } from '../types';
@@ -33,6 +36,7 @@ export default function ProfilePage() {
   });
   const [profile, setProfile] = useState<Profile | null>(null);
   const [likedSongs, setLikedSongs] = useState<Song[]>([]);
+  const [userPlaylists, setUserPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
@@ -80,13 +84,20 @@ export default function ProfilePage() {
       );
       setProfile(res.data.data);
 
-      const likesRes = await api.get<ApiResponse<Song[]>>(
-        `/songs/liked/${searchUsername.trim()}`,
-      );
+      const [likesRes, playlistsRes] = await Promise.all([
+        api.get<ApiResponse<Song[]>>(
+          `/songs/liked/${searchUsername.trim()}`,
+        ),
+        api.get<ApiResponse<Playlist[]>>(
+          `/playlists/user/${searchUsername.trim()}`,
+        ),
+      ]);
       setLikedSongs(likesRes.data.data);
+      setUserPlaylists(playlistsRes.data.data);
     } catch {
       setProfile(null);
       setLikedSongs([]);
+      setUserPlaylists([]);
       toast('Profile not found', 'error');
     } finally {
       setSearchLoading(false);
@@ -276,6 +287,60 @@ export default function ProfilePage() {
               icon={Music}
               title="No liked songs yet"
               description="Head to the home page to discover and like songs"
+            />
+          )}
+        </section>
+      )}
+
+      {/* ─── User Playlists ────────────────────────── */}
+      {profile && !searchLoading && (
+        <section>
+          <div className="mb-4 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-50">
+              <ListMusic className="h-4 w-4 text-accent-500" />
+            </div>
+            <h2 className="text-base font-bold text-surface-800">
+              Playlists
+            </h2>
+            <span className="badge bg-accent-50 text-accent-600 ml-auto">
+              {userPlaylists.length}
+            </span>
+          </div>
+
+          {userPlaylists.length > 0 ? (
+            <div className="space-y-3">
+              {userPlaylists.map((pl, i) => (
+                <motion.div
+                  key={pl.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.05, duration: 0.3 }}
+                >
+                  <Link
+                    to={`/playlists/${pl.id}`}
+                    className="card card-hover flex items-center gap-4 p-4"
+                  >
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-100 to-accent-100">
+                      <ListMusic className="h-5 w-5 text-primary-500" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-sm font-bold text-surface-900">
+                        {pl.name}
+                      </h3>
+                      <p className="text-2xs text-surface-400">
+                        {pl.track_count} track
+                        {pl.track_count !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              icon={ListMusic}
+              title="No playlists yet"
+              description="This user hasn't created any playlists"
             />
           )}
         </section>
