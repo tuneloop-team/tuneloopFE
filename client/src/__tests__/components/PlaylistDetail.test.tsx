@@ -46,7 +46,6 @@ vi.mock('../../services/api', () => ({
 
 import api from '../../services/api';
 const mockGet = api.get as Mock;
-const mockPost = api.post as Mock;
 const mockDelete = api.delete as Mock;
 
 const PLAYLIST_ID = 'aabbccdd-1234-5678-abcd-000000000001';
